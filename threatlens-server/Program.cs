@@ -1,6 +1,8 @@
 using Microsoft.OpenApi.Models;
 using FluentValidation;
 using FluentValidation.AspNetCore;
+using threatlens_server.Common;
+using threatlens_server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +24,15 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddMediatR(config => config.RegisterServicesFromAssembly(typeof(Program).Assembly));
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+builder.Services.AddSingleton<KafkaConsumerService>();
+
+builder.Services.AddSingleton(new KafkaConsumerConfig
+{
+    BootstrapServers = "localhost:29092",
+    GroupId = "network-packets-consumer-group",
+    Topic = "network-packets"
+});
 
 var app = builder.Build();
 
@@ -49,6 +60,8 @@ else
 //app.UseAuthorization();
 app.MapControllers();
 
-app.Run();
+var consumerService = app.Services.GetRequiredService<KafkaConsumerService>();
+var cts = new CancellationTokenSource();
+Task.Run(() => consumerService.ConsumeMessages(cts.Token));
 
 app.Run();
