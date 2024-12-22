@@ -25,6 +25,8 @@ builder.Services.AddMediatR(config => config.RegisterServicesFromAssembly(typeof
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
+builder.Services.AddSingleton(new MlModelService(@"C:\Users\Sead\Desktop\Github\Threatlens\AI Model\dynamic_trained_model(2).zip"));
+
 builder.Services.AddSingleton<KafkaConsumerService>();
 
 builder.Services.AddSingleton(new KafkaConsumerConfig
@@ -33,6 +35,8 @@ builder.Services.AddSingleton(new KafkaConsumerConfig
     GroupId = "network-packets-consumer-group",
     Topic = "network-packets"
 });
+
+
 
 var app = builder.Build();
 
