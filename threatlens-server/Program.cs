@@ -13,7 +13,7 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(
             .AllowAnyHeader()
             .AllowAnyMethod()));
 
-builder.Services.AddSwaggerGen(c => c.SwaggerDoc("v1", new OpenApiInfo { Title = "VSA Todo API", Version = "v1" }));
+builder.Services.AddSwaggerGen(c => c.SwaggerDoc("v1", new OpenApiInfo { Title = "SAI API", Version = "v1" }));
 
 builder.Services.AddProblemDetails();
 
