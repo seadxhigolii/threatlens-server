@@ -1,11 +1,8 @@
-﻿using Confluent.Kafka;
-using Microsoft.ML;
-using PacketDotNet;
+﻿using PacketDotNet;
 using SharpPcap;
 using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
-using System.Text.Json;
 using threatlens_server.Models;
 
 namespace threatlens_server.Services
@@ -38,15 +35,17 @@ namespace threatlens_server.Services
             }
 
             var networkInterfaces = NetworkInterface.GetAllNetworkInterfaces();
-            //\Device\NPF_{3002FBDD-BD00-4CFB-956C-4CF632CC3CA9}
+
             var targetInterface = networkInterfaces.FirstOrDefault(ni =>
             {
+                var ethernetIp = _configuration["Ethernet:IP"];
+                var ethernetMac = _configuration["Ethernet:MAC"];
                 var ipProperties = ni.GetIPProperties();
                 return ipProperties.UnicastAddresses.Any(ua =>
                     ua.Address.AddressFamily == AddressFamily.InterNetwork && // IPv4
-                    ua.Address.ToString() == "192.168.100.80" ||
+                    ua.Address.ToString() == ethernetIp ||
                     ua.Address.AddressFamily == AddressFamily.InterNetworkV6 && // IPv6
-                    ua.Address.ToString() == "fe80::d0fe:ff94:1a8c:150d%8");
+                    ua.Address.ToString() == ethernetMac);
             });
 
             if (targetInterface == null)
@@ -110,12 +109,17 @@ namespace threatlens_server.Services
         private void OnPacketArrival(object sender, PacketCapture e)
         {
             var rawPacket = Packet.ParsePacket(e.GetPacket().LinkLayerType, e.GetPacket().Data);
-            var tcpPacket = rawPacket.Extract<TcpPacket>();
             var ipPacket = rawPacket.Extract<IPPacket>();
+            if (ipPacket == null) return;
 
-            if (tcpPacket != null && ipPacket != null)
+            ModelInput inputData;
+
+            if (ipPacket.Protocol == PacketDotNet.ProtocolType.Tcp)
             {
-                var inputData = new ModelInput
+                var tcpPacket = rawPacket.Extract<TcpPacket>();
+                if (tcpPacket == null) return;
+
+                inputData = new ModelInput
                 {
                     SrcIp = ipPacket.SourceAddress.ToString(),
                     DstIp = ipPacket.DestinationAddress.ToString(),
@@ -125,9 +129,35 @@ namespace threatlens_server.Services
                     Sbytes = tcpPacket.PayloadData.Length,
                     Dbytes = tcpPacket.TotalPacketLength,
                     Sttl = ipPacket.TimeToLive
+                };                
+
+                var prediction = _mlModelService.Predict(inputData);
+
+                if (prediction.Prediction)
+                {
+                    Debug.WriteLine($"Anomaly detected! SrcIp: {inputData.SrcIp}, Score: {prediction.Score}");
+                }
+                else
+                {
+                    Debug.WriteLine($"Normal traffic. SrcIp: {inputData.SrcIp}, Score: {prediction.Score}");
+                }
+            }
+            else if (ipPacket.Protocol == PacketDotNet.ProtocolType.Udp)
+            {
+                var udpPacket = rawPacket.Extract<UdpPacket>();
+                if (udpPacket == null) return;
+                inputData = new ModelInput
+                {
+                    SrcIp = ipPacket.SourceAddress.ToString(),
+                    DstIp = ipPacket.DestinationAddress.ToString(),
+                    Sport = udpPacket.SourcePort,
+                    Dsport = udpPacket.DestinationPort,
+                    Proto = ipPacket.Protocol.ToString(),
+                    Sbytes = udpPacket.PayloadData.Length,
+                    Dbytes = udpPacket.TotalPacketLength,
+                    Sttl = ipPacket.TimeToLive
                 };
 
-                
 
                 var prediction = _mlModelService.Predict(inputData);
 
